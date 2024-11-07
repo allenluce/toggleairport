@@ -2,13 +2,20 @@
 #git@github.com:paulbhart/toggleairport.git
 #originally from https://gist.github.com/albertbori/1798d88a93175b9da00b
 
-# rate limiting, run at most every second
-if [ -f "/var/tmp/prev_toggle_airport_run" ]; then
-    prev_toggle_airport_run=`cat /var/tmp/prev_toggle_airport_run`
-    prev_toggle_airport_run_po=$(($prev_toggle_airport_run + 1))
-    current=`date +%s`
+unset VERBOSE
 
-    if (( $prev_toggle_airport_run_po > $current )); then
+while getopts "v" option; do
+    case $option in
+    v) VERBOSE=true
+    esac
+done
+
+# rate limiting, run at most every second
+lastRun=/var/tmp/prev_toggle_airport_run
+if [ -f "${lastRun}" ]; then
+    secondsSinceLastRun=$(($(/bin/date +%s) - $(/usr/bin/stat -t %s -f %m -- "$lastRun")))
+    if (( $secondsSinceLastRun < 1 )); then
+        [ ! -z $VERBOSE ] && echo Last ran $secondsSinceLastRun seconds ago, exiting
         exit 0
     fi
 fi
@@ -41,7 +48,7 @@ prev_air_status="Off"
 eth_status="Off"
 
 # Grab the names of the adapters. We assume here that any ethernet connection name ends in "Ethernet"
-eth_names=`networksetup -listnetworkserviceorder | sed -En 's/^\(Hardware Port: .*(Ethernet|LAN).* Device: (en[0-9]+)\)$/\2/p'`
+eth_names=`networksetup -listnetworkserviceorder | sed -En 's/^\(Hardware Port: .*(Ethernet|LAN|AX88179A).* Device: (en[0-9]+)\)$/\2/p'`
 air_name=`networksetup -listnetworkserviceorder | sed -En 's/^\(Hardware Port: (Wi-Fi|AirPort).* Device: (en[0-9]+)\)$/\2/p'`
 
 # Determine previous ethernet status
@@ -85,11 +92,11 @@ else
     if [ "$prev_air_status" != "$air_status" ]; then
         set_airport $air_status
 
-        # if [ "$air_status" = "On" ]; then
-        #     notify "Wi-Fi manually turned on."
-        # else
-        #     notify "Wi-Fi manually turned off."
-        # fi
+        if [ "$air_status" = "On" ]; then
+            notify "Wi-Fi manually turned on."
+        else
+            notify "Wi-Fi manually turned off."
+        fi
 
     fi
 
